@@ -26,7 +26,7 @@ export default function LoginPage() {
     try {
       console.log('Submitting login form with data:', formData);
       const response = await authApi.login(formData);
-      
+
       if (response.error) {
         console.error('Login error:', response.error);
         if (response.error.includes("CORS") || response.error.includes("Failed to fetch")) {

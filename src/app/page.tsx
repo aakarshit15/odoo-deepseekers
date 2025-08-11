@@ -1,25 +1,12 @@
 import { Input } from "@/components/ui/input";
 import VenuesSection from "@/components/VenuesSection";
+import { Navigation } from "@/components/Navigation";
 
 export default function Home() {
   return (
     <div className="min-h-screen bg-[#F9FAFB] dark:bg-[#1E1E1E] text-[#2D3436]">
+      <Navigation />
       <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <header className="flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-0 mb-6 sm:mb-8">
-          <div className="flex items-center">
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#2ECC71]">
-              QUICKCOURT
-            </h1>
-          </div>
-          <div className="flex items-center gap-3 sm:gap-4">
-            <button className="text-[#3498DB] hover:text-[#2C80B4] cursor-pointer hover:scale-95 text-sm sm:text-base">
-              Login
-            </button>
-            <button className="bg-[#2ECC71] hover:bg-[#27AE60] text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded cursor-pointer hover:scale-95 text-sm sm:text-base">
-              Sign Up
-            </button>
-          </div>
-        </header>
 
         <main>
           <section className="mb-8 sm:mb-12">

@@ -1,3 +1,5 @@
+import { getStoredTokens } from './auth';
+
 export const API_BASE_URL = "http://127.0.0.1:8000/api";
 
 export interface ApiResponse<T = any> {
@@ -41,7 +43,14 @@ export async function fetchApi<T>(
     console.log('Response data:', data);
 
     if (!response.ok) {
-      throw new Error(data?.detail || data?.message || "Something went wrong");
+      const errorMessage = data?.detail || data?.message || data?.error || `HTTP ${response.status}: ${response.statusText}`;
+      console.error('API Error Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        data: data,
+        url: url
+      });
+      throw new Error(errorMessage);
     }
 
     return { data };
@@ -130,6 +139,121 @@ export const authApi = {
     return fetchApi("/api/auth/logout/", {
       method: "POST",
       body: JSON.stringify({ refresh: refreshToken }),
+    });
+  },
+};
+
+// Sports API
+export const sportsApi = {
+  getAll: async () => {
+    // Try different possible endpoints for sports
+    const possibleEndpoints = ["/sports/", "/api/sports/", "/sports"];
+    
+    for (const endpoint of possibleEndpoints) {
+      try {
+        console.log(`Trying sports endpoint: ${endpoint}`);
+        const response = await fetchApi<Array<{
+          id: number;
+          name: string;
+          description?: string;
+        }>>(endpoint, {
+          method: "GET",
+        });
+        
+        if (!response.error && response.data) {
+          console.log(`Successfully fetched sports from: ${endpoint}`);
+          return response;
+        }
+      } catch (error) {
+        console.log(`Failed to fetch from ${endpoint}:`, error);
+        continue;
+      }
+    }
+    
+    // If all endpoints fail, return an error
+    return {
+      error: "Sports API endpoint not found. Tried: " + possibleEndpoints.join(", ")
+    };
+  },
+};
+
+// Venue API for owners
+export const venueApi = {
+  create: async (venueData: {
+    name: string;
+    description: string;
+    city: string;
+    locality?: string;
+    full_address: string;
+    latitude?: number;
+    longitude?: number;
+    sports: number[]; // Backend expects 'sports' field
+    amenities: string[];
+    starting_price_per_hour: number;
+  }) => {
+    const { accessToken } = getStoredTokens();
+    
+    if (!accessToken) {
+      return {
+        error: "Authentication required. Please log in again."
+      };
+    }
+
+    console.log('Creating venue with data:', venueData);
+    console.log('Using access token:', accessToken ? 'Present' : 'Missing');
+
+    return fetchApi<{
+      id: number;
+      name: string;
+      description: string;
+      city: string;
+      locality: string;
+      full_address: string;
+      latitude: number | null;
+      longitude: number | null;
+      sports: number[]; // Backend returns 'sports' field
+      amenities: string[];
+      starting_price_per_hour: number;
+      is_approved: boolean;
+      owner: number;
+    }>("/owner/venues/", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(venueData),
+    });
+  },
+
+  getOwnerVenues: async () => {
+    const { accessToken } = getStoredTokens();
+    
+    if (!accessToken) {
+      return {
+        error: "Authentication required. Please log in again."
+      };
+    }
+
+    return fetchApi<Array<{
+      id: number;
+      name: string;
+      description: string;
+      city: string;
+      locality: string;
+      full_address: string;
+      latitude: number | null;
+      longitude: number | null;
+      sports: number[]; // Backend returns 'sports' field
+      amenities: string[];
+      starting_price_per_hour: number;
+      is_approved: boolean;
+      owner: number;
+    }>>("/owner/venues/", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     });
   },
 };

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import axios from "axios";
 import {
   Select,
   SelectContent,
@@ -20,12 +21,18 @@ import { authApi } from "@/lib/api";
 import { validatePassword, storeEmailForVerification } from "@/lib/auth";
 
 export default function SignUpPage() {
+
+  console.log("hello world!!! topper");
+  const cityRef = useRef<HTMLInputElement>(null);
+  const localityRef = useRef<HTMLInputElement>(null);
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [userType, setUserType] = useState<string>();
   const [profileImage, setProfileImage] = useState<string>();
   const [formData, setFormData] = useState({
     fullName: "",
+    role: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -34,7 +41,151 @@ export default function SignUpPage() {
     fullAddress: "",
     latitude: "",
     longitude: "",
+    avatar: null as File | null,
   });
+
+  const handleUserTypeChange = (value: string) => {
+    setFormData((prev) => ({ ...prev, role: value }));
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const loadScript = (url: string) => {
+      const script = document.createElement("script");
+      script.src = url;
+      script.async = true;
+      document.head.appendChild(script);
+    };
+
+    const googleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY;
+    if (!googleMapsApiKey) {
+      console.error("Google Maps API key is not configured");
+      return;
+    }
+
+    if (!(window as any).google) {
+      loadScript(
+        `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places`
+      );
+    }
+
+    const initAutocomplete = () => {
+      const google = (window as any).google;
+      if (!google?.maps?.places) {
+        console.error("Google Maps Places API not loaded");
+        return;
+      }
+
+      // City autocomplete
+      const cityAutocomplete = new google.maps.places.Autocomplete(
+        cityRef.current!,
+        {
+          componentRestrictions: { country: "in" },
+          types: ["(cities)"],
+        }
+      );
+
+      cityAutocomplete.addListener("place_changed", () => {
+        const place = cityAutocomplete.getPlace();
+        if (!place.address_components) {
+          console.error("No address components found");
+          return;
+        }
+
+        const cityComponent = place.address_components?.find(
+          (c: { types: string[]; long_name: string }) =>
+            c.types.includes("locality") ||
+            c.types.includes("administrative_area_level_2")
+        );
+
+        if (cityComponent) {
+          const coordinates = {
+            lat: place.geometry?.location?.lat(),
+            lng: place.geometry?.location?.lng(),
+          };
+
+          // Use the full formatted text for the city input
+          const selectedCity =
+            place.formatted_address || place.name || cityComponent.long_name;
+
+          setFormData((prev) => ({
+            ...prev,
+            city: selectedCity,
+            fullAddress: place.formatted_address || "",
+            latitude: coordinates.lat ? coordinates.lat.toString() : "",
+            longitude: coordinates.lng ? coordinates.lng.toString() : "",
+            // Clear locality when city changes
+            locality: "",
+          }));
+        }
+      });
+
+      // Locality autocomplete
+      const localityAutocomplete = new google.maps.places.Autocomplete(
+        localityRef.current!,
+        {
+          componentRestrictions: { country: "in" },
+          types: ["geocode"],
+        }
+      );
+
+      localityAutocomplete.addListener("place_changed", () => {
+        const place = localityAutocomplete.getPlace();
+        if (!place.address_components) {
+          console.error("No address components found");
+          return;
+        }
+
+        const localityComponent = place.address_components?.find(
+          (c: { types: string[]; long_name: string }) =>
+            c.types.includes("sublocality") ||
+            c.types.includes("sublocality_level_1") ||
+            c.types.includes("neighborhood")
+        );
+
+        const cityComponent = place.address_components?.find(
+          (c: { types: string[]; long_name: string }) =>
+            c.types.includes("locality") ||
+            c.types.includes("administrative_area_level_2")
+        );
+
+        const coordinates = {
+          lat: place.geometry?.location?.lat(),
+          lng: place.geometry?.location?.lng(),
+        };
+
+        // Get the selected locality name from the place
+        const selectedLocality =
+          place.formatted_address ||
+          place.name ||
+          localityComponent?.long_name ||
+          "";
+
+        setFormData((prev) => ({
+          ...prev,
+          // Update city if it was empty or different
+          city: prev.city || cityComponent?.long_name || "",
+          // Update locality from the selected place
+          locality: selectedLocality,
+          // Always update full address and coordinates
+          fullAddress: place.formatted_address || "",
+          latitude: coordinates.lat ? coordinates.lat.toString() : "",
+          longitude: coordinates.lng ? coordinates.lng.toString() : "",
+        }));
+      });
+    };
+
+    // Wait for script load
+    const interval = setInterval(() => {
+      if ((window as any).google?.maps) {
+        initAutocomplete();
+        clearInterval(interval);
+      }
+    }, 300);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -44,9 +195,14 @@ export default function SignUpPage() {
         alert("Please upload an image smaller than 1 MB");
         return;
       }
+      // Store the file object in form state
+      setFormData((prev) => ({ ...prev, avatar: file }));
+
+      // Create preview
       const reader = new FileReader();
       reader.onloadend = () => {
-        setProfileImage(reader.result as string);
+        const base64String = reader.result as string;
+        setProfileImage(base64String);
       };
       reader.readAsDataURL(file);
     }
@@ -57,76 +213,58 @@ export default function SignUpPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Validate passwords match
-    if (formData.password !== formData.confirmPassword) {
-      toast.error("Passwords do not match");
-      return;
-    }
-
-    // Validate password strength
-    const passwordValidation = validatePassword(formData.password);
-    if (!passwordValidation.isValid) {
-      toast.error(passwordValidation.error);
-      return;
-    }
-
-    // Validate email
-    if (!formData.email) {
-      toast.error("Email is required");
-      return;
-    }
-
-    // Validate full name
-    if (!formData.fullName) {
-      toast.error("Full name is required");
-      return;
-    }
-
-    // Validate user type
-    if (!userType) {
-      toast.error("Please select your role");
-      return;
-    }
-
+  
+    // ... your existing validation code ...
+  
     setIsLoading(true);
-
+  
     try {
-      // Prepare location data
-      const locationData: any = {};
-      if (formData.city) locationData.city = formData.city;
-      if (formData.locality) locationData.locality = formData.locality;
-      if (formData.fullAddress)
-        locationData.full_address = formData.fullAddress;
-      if (formData.latitude)
-        locationData.latitude = parseFloat(formData.latitude);
-      if (formData.longitude)
-        locationData.longitude = parseFloat(formData.longitude);
-
-      const response = await authApi.signup({
-        email: formData.email,
-        password: formData.password,
-        username: formData.fullName,
-        role: userType,
-        avatar: profileImage,
-        ...locationData,
-      });
-
-      if (response.error) {
-        toast.error(response.error);
-        return;
+      // Create FormData object with correct field names
+      const formDataToSend = new FormData();
+  
+      // Append all form fields
+      formDataToSend.append("email", formData.email);
+      formDataToSend.append("password", formData.password);
+      formDataToSend.append("role", formData.role || "");
+  
+      // Append location data with correct field names
+      if (formData.city) formDataToSend.append("city", formData.city);
+      if (formData.locality) formDataToSend.append("locality", formData.locality);
+      if (formData.fullAddress) formDataToSend.append("full_address", formData.fullAddress); // ✅ Key change
+      if (formData.latitude) formDataToSend.append("latitude", formData.latitude);
+      if (formData.longitude) formDataToSend.append("longitude", formData.longitude);
+  
+      // Append avatar file if it exists
+      if (formData.avatar) {
+        formDataToSend.append("avatar", formData.avatar);
       }
-
-      // Store email for OTP verification
-      storeEmailForVerification(formData.email);
-
-      // Show success message
-      toast.success("Sign up successful! Please verify your email.");
-
-      // Redirect to verify email page
-      router.push("/verify-email");
-    } catch (error) {
-      toast.error("An error occurred during sign up");
+  
+      // Debug: Log what's being sent
+      console.log("FormData contents:");
+      for (let [key, value] of formDataToSend.entries()) {
+        console.log(key, value);
+      }
+  
+      const response = await axios.post(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/auth/signup/`,
+        formDataToSend,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+  
+      if (response.data) {
+        storeEmailForVerification(formData.email);
+        toast.success("Sign up successful! Please verify your email.");
+        router.push("/verify-email");
+      }
+    } catch (axiosError: any) {
+      const errorMessage =
+        axiosError.response?.data?.message ||
+        "An error occurred during sign up";
+      alert(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -142,7 +280,7 @@ export default function SignUpPage() {
           SIGN UP
         </h2>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form className="space-y-6">
           {/* Profile Picture */}
           <div className="flex flex-col items-center gap-2">
             <div className="relative w-24 h-24 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800">
@@ -181,12 +319,12 @@ export default function SignUpPage() {
             <label className="text-sm font-medium text-[#2D3436] dark:text-white">
               Sign up as
             </label>
-            <Select onValueChange={setUserType}>
+            <Select onValueChange={handleUserTypeChange}>
               <SelectTrigger>
                 <SelectValue placeholder="Player / Facility Owner" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="player">Player</SelectItem>
+                <SelectItem value="user">Player</SelectItem>
                 <SelectItem value="owner">Facility Owner</SelectItem>
               </SelectContent>
             </Select>
@@ -282,85 +420,79 @@ export default function SignUpPage() {
             </div>
           </div>
 
-          {/* Location Fields - Only shown for facility owners */}
-          {userType === "owner" && (
-            <div className="space-y-6">
+          {/* Location Fields - Shown for all users */}
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-[#2D3436] dark:text-white">
+                City
+              </label>
+              <Input
+                type="text"
+                placeholder="Search for your city"
+                ref={cityRef}
+                value={formData.city}
+                onChange={(e) =>
+                  setFormData({ ...formData, city: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-[#2D3436] dark:text-white">
+                Locality/Area
+              </label>
+              <Input
+                type="text"
+                placeholder="Search for your locality or area"
+                ref={localityRef}
+                value={formData.locality}
+                onChange={(e) =>
+                  setFormData({ ...formData, locality: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-[#2D3436] dark:text-white">
+                Full Address
+              </label>
+              <Input
+                type="text"
+                placeholder="Full address will be generated automatically"
+                value={formData.fullAddress}
+                disabled
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-[#2D3436] dark:text-white">
-                  City
+                  Latitude
                 </label>
                 <Input
                   type="text"
-                  placeholder="Enter your city"
-                  value={formData.city}
-                  onChange={(e) =>
-                    setFormData({ ...formData, city: e.target.value })
-                  }
+                  placeholder="Will be set automatically"
+                  value={formData.latitude}
+                  disabled
                 />
               </div>
-
               <div className="space-y-2">
                 <label className="text-sm font-medium text-[#2D3436] dark:text-white">
-                  Locality/Area
+                  Longitude
                 </label>
                 <Input
                   type="text"
-                  placeholder="Enter your locality or area"
-                  value={formData.locality}
-                  onChange={(e) =>
-                    setFormData({ ...formData, locality: e.target.value })
-                  }
+                  placeholder="Will be set automatically"
+                  value={formData.longitude}
+                  disabled
                 />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-[#2D3436] dark:text-white">
-                  Full Address
-                </label>
-                <Input
-                  type="text"
-                  placeholder="Enter your complete address"
-                  value={formData.fullAddress}
-                  onChange={(e) =>
-                    setFormData({ ...formData, fullAddress: e.target.value })
-                  }
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-[#2D3436] dark:text-white">
-                    Latitude
-                  </label>
-                  <Input
-                    type="text"
-                    placeholder="Enter latitude"
-                    value={formData.latitude}
-                    onChange={(e) =>
-                      setFormData({ ...formData, latitude: e.target.value })
-                    }
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-[#2D3436] dark:text-white">
-                    Longitude
-                  </label>
-                  <Input
-                    type="text"
-                    placeholder="Enter longitude"
-                    value={formData.longitude}
-                    onChange={(e) =>
-                      setFormData({ ...formData, longitude: e.target.value })
-                    }
-                  />
-                </div>
               </div>
             </div>
-          )}
+          </div>
 
           <Button
-            type="submit"
+            // type="submit"
+            onClick={(e) => {handleSubmit(e)}}
             className="w-full bg-[#2ECC71] hover:bg-[#27AE60]"
             disabled={isLoading}
           >

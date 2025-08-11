@@ -14,6 +14,7 @@ import {
   storeAuthTokens,
   storeUserData,
 } from "@/lib/auth";
+import axios from "axios";
 
 export default function VerifyEmailPage() {
   const router = useRouter();
@@ -98,15 +99,23 @@ export default function VerifyEmailPage() {
     setIsLoading(true);
 
     try {
-      const response = await authApi.verifyOtp({
-        email,
-        code: otpString,
-      });
+      const response = await axios.post(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/auth/verify-otp`,
+        {
+          email: email,
+          code: otpString,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json"
+          }
+        }
+      );
 
-      if (response.error) {
-        toast.error(response.error);
-        return;
-      }
+      // if (response.error) {
+      //   toast.error(response.error);
+      //   return;
+      // }
 
       if (
         response.data &&
