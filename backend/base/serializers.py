@@ -165,6 +165,20 @@ class VenueDetailSerializer(serializers.ModelSerializer):
         model = Venue
         fields = '__all__'
 
+class VenueCreateSerializer(serializers.ModelSerializer):
+    sports = serializers.ListField(
+        child=serializers.IntegerField(), write_only=True, help_text="List of sport IDs"
+    )
+
+    class Meta:
+        model = Venue
+        fields = ["name", "description", "city", "locality", "full_address", "latitude", "longitude", "amenities", "starting_price_per_hour", "sports"]
+
+    def create(self, validated_data):
+        sports = validated_data.pop("sports")
+        venue = Venue.objects.create(**validated_data)
+        venue.sports.set(sports)
+        return venue
 
 class CourtAvailabilitySerializer(serializers.ModelSerializer):
     class Meta:

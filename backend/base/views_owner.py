@@ -23,7 +23,7 @@ class OwnerVenueListView(generics.ListAPIView):
         return Venue.objects.filter(owner=self.request.user)
 
 class OwnerVenueCreateView(generics.CreateAPIView):
-    serializer_class = VenueDetailSerializer
+    serializer_class = VenueCreateSerializer
     permission_classes = [IsFacilityOwner]
 
     def perform_create(self, serializer):
