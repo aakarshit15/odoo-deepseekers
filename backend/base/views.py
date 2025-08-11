@@ -1,7 +1,8 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import generics, permissions, pagination
+from rest_framework import generics, permissions, pagination, status
 from django.db.models import Count, Q, Min, Max
+from django.shortcuts import get_object_or_404
 from .models import *
 from .serializers import *
 
@@ -82,3 +83,115 @@ class VenuesListView(generics.ListAPIView):
             qs = qs.order_by('-popularity_score')
 
         return qs.distinct()
+
+class VenueDetailView(generics.RetrieveAPIView):
+    queryset = Venue.objects.prefetch_related('sports', 'photos', 'reviews__user')
+    serializer_class = VenueDetailSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def retrieve(self, request, *args, **kwargs):
+        venue = self.get_object()
+        venue_data = VenueDetailSerializer(venue, context={'request': request}).data
+
+        reviews = Review.objects.filter(venue=venue).select_related('user').order_by('-created_at')
+        reviews_data = ReviewSerializer(reviews, many=True, context={'request': request}).data
+
+        return Response({
+            "venue": venue_data,
+            "reviews": reviews_data
+        })
+    
+class SportPricingView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, venue_id, sport_id):
+        venue = get_object_or_404(Venue, id=venue_id, is_approved=True)
+        courts = Court.objects.filter(venue=venue, sport_id=sport_id).prefetch_related('availability')
+
+        seen_specs = {}
+        for court in courts:
+            availability_specs = tuple(
+                sorted(
+                    (
+                        avail.day_type,
+                        str(avail.start_time),
+                        str(avail.end_time),
+                        float(avail.price_per_hour)
+                    )
+                    for avail in court.availability.all()
+                )
+            )
+
+            if availability_specs not in seen_specs:
+                seen_specs[availability_specs] = {
+                    "court_names": [court.name],
+                    "availability": [
+                        {
+                            "day_type": avail.get_day_type_display(),
+                            "start_time": avail.start_time,
+                            "end_time": avail.end_time,
+                            "price_per_hour": avail.price_per_hour
+                        }
+                        for avail in court.availability.all()
+                    ]
+                }
+            else:
+                seen_specs[availability_specs]["court_names"].append(court.name)
+
+        pricing_data = []
+        for spec, data in seen_specs.items():
+            pricing_data.append({
+                "court_names": ", ".join(data["court_names"]),
+                "availability": data["availability"]
+            })
+
+        return Response({
+            "venue": {
+                "id": venue.id,
+                "name": venue.name,
+                "city": venue.city,
+                "locality": venue.locality
+            },
+            "sport_id": sport_id,
+            "pricing": pricing_data
+        })
+    
+class IsReviewOwner(permissions.BasePermission):
+    def has_object_permission(self, request, view, obj):
+        return obj.user == request.user
+
+class ReviewCreateView(generics.CreateAPIView):
+    serializer_class = ReviewSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        venue_id = kwargs.get('venue_id')
+        venue = get_object_or_404(Venue, id=venue_id, is_approved=True)
+
+        if Review.objects.filter(user=request.user, venue=venue).exists():
+            return Response({"detail": "You have already reviewed this venue."}, status=status.HTTP_400_BAD_REQUEST)
+
+        rating = request.data.get('rating')
+        if not rating:
+            return Response({"detail": "Rating is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(user=request.user, venue=venue)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+class ReviewUpdateView(generics.UpdateAPIView):
+    queryset = Review.objects.all()
+    serializer_class = ReviewSerializer
+    permission_classes = [permissions.IsAuthenticated, IsReviewOwner]
+
+    def get_queryset(self):
+        return super().get_queryset().filter(user=self.request.user)
+
+class ReviewDeleteView(generics.DestroyAPIView):
+    queryset = Review.objects.all()
+    serializer_class = ReviewSerializer
+    permission_classes = [permissions.IsAuthenticated, IsReviewOwner]
+
+    def get_queryset(self):
+        return super().get_queryset().filter(user=self.request.user)

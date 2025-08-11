@@ -18,6 +18,11 @@ urlpatterns = [
     # User
     path('home/', HomePageView.as_view(), name='home-page'),
     path('venues/', VenuesListView.as_view(), name='venues-list'),
+    path('venues/<int:pk>/', VenueDetailView.as_view(), name='venue-detail'),
+    path('venues/<int:venue_id>/sports/<int:sport_id>/pricing/', SportPricingView.as_view(), name='sport-pricing'),
+    path('venues/<int:venue_id>/reviews/add/', ReviewCreateView.as_view(), name='review-add'),
+    path('reviews/<int:pk>/edit/', ReviewUpdateView.as_view(), name='review-edit'),
+    path('reviews/<int:pk>/delete/', ReviewDeleteView.as_view(), name='review-delete'),
 
     # Facility Owner
     path('owner/venues/all/', OwnerVenueListView.as_view(), name='owner-venues-list'),
