@@ -10,7 +10,7 @@ from .serializers import *
 
 class IsFacilityOwner(permissions.BasePermission):
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == 'facility_owner'
+        return request.user.is_authenticated and request.user.role == 'owner'
 
     def has_object_permission(self, request, view, obj):
         return hasattr(obj, 'owner') and obj.owner == request.user
