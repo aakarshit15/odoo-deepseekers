@@ -1,0 +1,140 @@
+from django.db import models
+from django.contrib.auth.models import AbstractUser
+from cloudinary.models import CloudinaryField
+
+class User(AbstractUser):
+    ROLE_CHOICES = [
+        ('user', 'User'),
+        ('owner', 'Facility Owner'),
+        ('admin', 'Admin'),
+    ]
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='user')
+    avatar = CloudinaryField('avatar', blank=True, null=True, folder='quickcourt/avatars/')
+    city = models.CharField(max_length=100)
+    locality = models.CharField(max_length=100, blank=True)
+    full_address = models.CharField(max_length=255)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
+
+    def __str__(self):
+        return self.username
+
+
+class Sport(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return self.name
+
+
+class Venue(models.Model):
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='venues')
+    name = models.CharField(max_length=200)
+    description = models.TextField()
+    city = models.CharField(max_length=100)
+    locality = models.CharField(max_length=100, blank=True)
+    full_address = models.CharField(max_length=255)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
+    sports = models.ManyToManyField(Sport, related_name='venues')
+    amenities = models.JSONField(default=list, blank=True)
+    starting_price_per_hour = models.DecimalField(max_digits=8, decimal_places=2)
+    rating = models.DecimalField(max_digits=3, decimal_places=2, blank=True, null=True)
+    popularity_score = models.DecimalField(max_digits=6, decimal_places=2, default=0)  
+    is_approved = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def update_popularity(self):
+        total_bookings = self.bookings.count()
+        rating_value = self.rating if self.rating else 0
+        self.popularity_score = total_bookings * 0.7 + rating_value * 0.3
+        self.save()
+
+    def __str__(self):
+        return self.name
+
+
+class VenuePhoto(models.Model):
+    venue = models.ForeignKey(Venue, on_delete=models.CASCADE, related_name='photos')
+    image = CloudinaryField('venue_photo', folder='quickcourt/venues/')
+
+    def __str__(self):
+        return f"Photo for {self.venue.name}"
+
+
+class Court(models.Model):
+    venue = models.ForeignKey(Venue, on_delete=models.CASCADE, related_name='courts')
+    name = models.CharField(max_length=100)
+    sport = models.ForeignKey(Sport, on_delete=models.CASCADE)
+    price_per_hour = models.DecimalField(max_digits=8, decimal_places=2)
+
+    def __str__(self):
+        return f"{self.name} - {self.venue.name}"
+
+
+class CourtAvailability(models.Model):
+    DAY_CHOICES = [
+        ('mon_fri', 'Monday - Friday'),
+        ('sat_sun', 'Saturday - Sunday'),
+        ('holidays', 'Holidays'),
+    ]
+    court = models.ForeignKey(Court, on_delete=models.CASCADE, related_name='availability')
+    day_type = models.CharField(max_length=20, choices=DAY_CHOICES)
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    price_per_hour = models.DecimalField(max_digits=8, decimal_places=2)
+
+    def __str__(self):
+        return f"{self.court.name} - {self.day_type}"
+
+
+class Booking(models.Model):
+    STATUS_CHOICES = [
+        ('confirmed', 'Confirmed'),
+        ('cancelled', 'Cancelled'),
+        ('completed', 'Completed'),
+    ]
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='bookings')
+    court = models.ForeignKey(Court, on_delete=models.CASCADE, related_name='bookings')
+    date = models.DateField()
+    slot_start = models.TimeField()
+    slot_end = models.TimeField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='confirmed')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['court', 'date', 'slot_start', 'slot_end'],
+                name='unique_court_booking'
+            )
+        ]
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        venue = self.court.venue
+        venue.update_popularity()
+
+    def __str__(self):
+        return f"{self.user.username} - {self.court.name} - {self.date}"
+
+
+class Review(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    venue = models.ForeignKey(Venue, on_delete=models.CASCADE, related_name='reviews')
+    rating = models.PositiveSmallIntegerField()
+    comment = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'venue')
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        venue = self.venue
+        avg_rating = venue.reviews.aggregate(models.Avg('rating'))['rating__avg'] or 0
+        venue.rating = avg_rating
+        venue.update_popularity()
+
+    def __str__(self):
+        return f"Review by {self.user.username} for {self.venue.name}"
