@@ -2,8 +2,9 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from cloudinary.models import CloudinaryField
 from django.utils import timezone
-from datetime import timedelta
-import random
+from datetime import datetime, date, timedelta
+from decimal import Decimal
+import random, holidays
 
 class User(AbstractUser):
     ROLE_CHOICES = [
@@ -120,6 +121,7 @@ class Booking(models.Model):
     slot_start = models.TimeField()
     slot_end = models.TimeField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='confirmed')
+    price = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -130,10 +132,39 @@ class Booking(models.Model):
             )
         ]
 
+    def get_day_type(self):
+        """Map booking date to CourtAvailability's day_type."""
+        india_holidays = holidays.India()
+        if self.date in india_holidays:
+            return 'holidays'
+        weekday = self.date.weekday()
+        if weekday < 5:  # Monday-Friday
+            return 'mon_fri'
+        return 'sat_sun'
+
+    def calculate_price(self):
+        """Calculate booking price based on court availability."""
+        day_type = self.get_day_type()
+        availability = CourtAvailability.objects.filter(
+            court=self.court,
+            day_type=day_type,
+            start_time__lte=self.slot_start,
+            end_time__gte=self.slot_end
+        ).first()
+
+        if availability:
+            hours = (
+                datetime.combine(date.min, self.slot_end) -
+                datetime.combine(date.min, self.slot_start)
+            ).seconds / 3600
+            return Decimal(hours) * availability.price_per_hour
+        return Decimal(0)
+
     def save(self, *args, **kwargs):
+        if not self.price:
+            self.price = self.calculate_price()
         super().save(*args, **kwargs)
-        venue = self.court.venue
-        venue.update_popularity()
+        self.court.venue.update_popularity()
 
     def __str__(self):
         return f"{self.user.username} - {self.court.name} - {self.date}"

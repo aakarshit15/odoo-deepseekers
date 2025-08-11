@@ -188,7 +188,7 @@ class BookingSerializer(serializers.ModelSerializer):
         model = Booking
         fields = [
             'id', 'user', 'court', 'date',
-            'slot_start', 'slot_end', 'status', 'created_at'
+            'slot_start', 'slot_end', 'status', 'price', 'created_at'
         ]
 
 
