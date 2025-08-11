@@ -17,6 +17,7 @@ urlpatterns = [
 
     # User
     path('home/', HomePageView.as_view(), name='home-page'),
+    path('venues/', VenuesListView.as_view(), name='venues-list'),
 
     # Facility Owner
     path('owner/venues/all/', OwnerVenueListView.as_view(), name='owner-venues-list'),
