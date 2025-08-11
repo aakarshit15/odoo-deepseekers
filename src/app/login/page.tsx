@@ -5,18 +5,50 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
+import { authApi } from "@/lib/api";
+import { storeAuthTokens, storeUserData } from "@/lib/auth";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Add your login logic here
-    console.log(formData);
+    setIsLoading(true);
+
+    try {
+      console.log('Submitting login form with data:', formData);
+      const response = await authApi.login(formData);
+      
+      if (response.error) {
+        console.error('Login error:', response.error);
+        if (response.error.includes("CORS") || response.error.includes("Failed to fetch")) {
+          toast.error("Unable to connect to the server. Please ensure the backend server is running and CORS is configured properly.");
+        } else {
+          toast.error(response.error);
+        }
+        return;
+      }
+
+      if (response.data) {
+        const { refresh, access, user } = response.data;
+        storeAuthTokens({ refresh, access });
+        storeUserData(user);
+        toast.success("Login successful!");
+        router.push("/profile");
+      }
+    } catch (error) {
+      toast.error("An error occurred during login");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -95,8 +127,9 @@ export default function LoginPage() {
           <Button
             type="submit"
             className="w-full bg-[#2ECC71] hover:bg-[#27AE60] text-white font-medium"
+            disabled={isLoading}
           >
-            Login
+            {isLoading ? "Logging in..." : "Login"}
           </Button>
 
           {/* Links */}

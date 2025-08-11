@@ -8,7 +8,12 @@ interface User {
   username: string;
   email: string;
   role: string;
-  avatar?: string;
+  avatar: string | null;
+  city: string;
+  locality: string;
+  full_address: string;
+  latitude: number | null;
+  longitude: number | null;
   is_active: boolean;
 }
 

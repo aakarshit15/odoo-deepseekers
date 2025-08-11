@@ -1,8 +1,11 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { useRouter } from "next/navigation";
+import { isLoggedIn } from "@/lib/auth";
 import {
   Clock,
   MapPin,
@@ -18,41 +21,64 @@ import Image from "next/image";
 import Link from "next/link";
 
 export default function UserProfilePage() {
-  // Dummy user data - replace with actual user data
-  const user = {
-    name: "John Doe",
-    email: "john.doe@example.com",
-    phone: "+91 9876543210",
-    location: "Mumbai, India",
-    joinedDate: "January 2025",
-    type: "Player",
-    profileImage: "/images/hero-section-img.png",
-    upcomingBookings: [
-      {
-        id: 1,
-        venue: "Basketball Court",
-        date: "Aug 15, 2025",
-        time: "10:00 AM - 11:00 AM",
-        price: 1200,
-      },
-      {
-        id: 2,
-        venue: "Tennis Court",
-        date: "Aug 18, 2025",
-        time: "04:00 PM - 05:00 PM",
-        price: 800,
-      },
-    ],
-    pastBookings: [
-      {
-        id: 3,
-        venue: "Football Ground",
-        date: "Aug 5, 2025",
-        time: "06:00 PM - 07:00 PM",
-        price: 1500,
-      },
-    ],
-  };
+  const router = useRouter();
+  
+  useEffect(() => {
+    if (!isLoggedIn()) {
+      router.push('/login');
+    }
+  }, [router]);
+
+  const [user, setUser] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const userData = JSON.parse(localStorage.getItem('user') || '{}');
+      return {
+        name: userData.username || '',
+        email: userData.email || '',
+        phone: 'Not set',
+        location: `${userData.locality || ''}, ${userData.city || ''}`,
+        joinedDate: 'Recently joined',
+        type: userData.role || 'User',
+        profileImage: userData.avatar || '/images/hero-section-img.png',
+        upcomingBookings: [
+          {
+            id: 1,
+            venue: "Basketball Court",
+            date: "Aug 15, 2025",
+            time: "10:00 AM - 11:00 AM",
+            price: 1200,
+          },
+          {
+            id: 2,
+            venue: "Tennis Court",
+            date: "Aug 18, 2025",
+            time: "04:00 PM - 05:00 PM",
+            price: 800,
+          },
+        ],
+        pastBookings: [
+          {
+            id: 3,
+            venue: "Football Ground",
+            date: "Aug 5, 2025",
+            time: "06:00 PM - 07:00 PM",
+            price: 1500,
+          },
+        ],
+      };
+    }
+    return {
+      name: '',
+      email: '',
+      phone: 'Not set',
+      location: '',
+      joinedDate: 'Recently joined',
+      type: 'User',
+      profileImage: '/images/hero-section-img.png',
+      upcomingBookings: [],
+      pastBookings: []
+    };
+  });
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] dark:bg-[#1E1E1E]">
@@ -136,6 +162,12 @@ export default function UserProfilePage() {
                   <Button
                     variant="outline"
                     className="w-full justify-start text-red-500"
+                    onClick={() => {
+                      localStorage.removeItem('user');
+                      localStorage.removeItem('accessToken');
+                      localStorage.removeItem('refreshToken');
+                      router.push('/login');
+                    }}
                   >
                     <LogOut className="w-4 h-4 mr-2" />
                     Logout
