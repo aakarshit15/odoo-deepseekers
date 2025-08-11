@@ -30,6 +30,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 class SignupSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
+    avatar = serializers.FileField(required=False, allow_null=True)
 
     class Meta:
         model = User
@@ -37,12 +38,52 @@ class SignupSerializer(serializers.ModelSerializer):
             'id', 'username', 'email', 'password', 'role', 'avatar',
             'city', 'locality', 'full_address', 'latitude', 'longitude'
         ]
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'username']  # Make username read-only since we auto-generate it
 
     def validate_email(self, value):
         if User.objects.filter(email__iexact=value).exists():
             raise serializers.ValidationError("Email already registered. Try logging in or use resend-OTP.")
         return value
+
+    def to_internal_value(self, data):
+        # Fix decimal places before validation
+        if 'latitude' in data and data['latitude']:
+            try:
+                data = data.copy()
+                data['latitude'] = str(round(float(data['latitude']), 6))
+            except (ValueError, TypeError):
+                pass
+                
+        if 'longitude' in data and data['longitude']:
+            try:
+                data = data.copy()
+                data['longitude'] = str(round(float(data['longitude']), 6))
+            except (ValueError, TypeError):
+                pass
+        
+        return super().to_internal_value(data)
+
+    def validate(self, attrs):
+        print("=== VALIDATION DEBUG ===")
+        print("Original attrs:", attrs)
+        
+        # Convert frontend field names to backend field names
+        if 'fullAddress' in attrs:
+            attrs['full_address'] = attrs.pop('fullAddress')
+            print("Converted fullAddress to full_address")
+        
+        print("After conversion:", attrs)
+        
+        # Ensure required fields are present
+        required_fields = ['email', 'password', 'city', 'full_address']
+        for field in required_fields:
+            if field not in attrs:
+                print(f"Missing required field: {field}")
+                raise serializers.ValidationError(f"{field} is required.")
+        
+        print("All required fields present")
+        print("================================")
+        return attrs
 
     def create(self, validated_data):
         password = validated_data.pop('password')

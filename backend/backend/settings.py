@@ -85,13 +85,21 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
 ]
 
-cloudinary.config(
-    cloud_name = config("CLOUDINARY_CLOUD_NAME"),
-    api_key = config("CLOUDINARY_API_KEY"),
-    api_secret = config("CLOUDINARY_API_SECRET")
-)
+# Only configure Cloudinary if environment variables are set
+cloudinary_cloud_name = config("CLOUDINARY_CLOUD_NAME", default="")
+cloudinary_api_key = config("CLOUDINARY_API_KEY", default="")
+cloudinary_api_secret = config("CLOUDINARY_API_SECRET", default="")
 
-DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+if cloudinary_cloud_name and cloudinary_api_key and cloudinary_api_secret:
+    cloudinary.config(
+        cloud_name=cloudinary_cloud_name,
+        api_key=cloudinary_api_key,
+        api_secret=cloudinary_api_secret
+    )
+    DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+else:
+    # Fallback to local file storage if Cloudinary is not configured
+    DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
@@ -178,5 +186,5 @@ MEDIA_URL = '/media/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # PayPal Settings
-PAYPAL_CLIENT_ID = config('PAYPAL_CLIENT_ID')
+PAYPAL_CLIENT_ID = config('PAYPAL_CLIENT_ID', default='')
 PAYPAL_CURRENCY = config('PAYPAL_CURRENCY', default='USD')
