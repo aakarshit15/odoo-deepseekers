@@ -15,7 +15,11 @@ urlpatterns = [
     path('profile/', ProfileView.as_view(), name='profile'),
     path('profile/change-password/', ChangePasswordView.as_view(), name='change-password'),
 
+    # User
+    path('home/', HomePageView.as_view(), name='home-page'),
+
     # Facility Owner
+    path('owner/venues/all/', OwnerVenueListView.as_view(), name='owner-venues-list'),
     path('owner/venues/', OwnerVenueCreateView.as_view(), name='owner-add-venue'),
     path('owner/venues/<int:pk>/', OwnerVenueUpdateView.as_view(), name='owner-edit-venue'),
     path('owner/venues/<int:pk>/photos/', OwnerVenuePhotoUploadView.as_view(), name='owner-upload-venue-photo'),

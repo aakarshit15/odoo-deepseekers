@@ -15,6 +15,12 @@ class IsFacilityOwner(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         return hasattr(obj, 'owner') and obj.owner == request.user
 
+class OwnerVenueListView(generics.ListAPIView):
+    serializer_class = VenueDetailSerializer
+    permission_classes = [IsFacilityOwner]
+
+    def get_queryset(self):
+        return Venue.objects.filter(owner=self.request.user)
 
 class OwnerVenueCreateView(generics.CreateAPIView):
     serializer_class = VenueDetailSerializer

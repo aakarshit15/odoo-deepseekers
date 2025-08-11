@@ -86,6 +86,7 @@ class VenuePhoto(models.Model):
 
 class Court(models.Model):
     venue = models.ForeignKey(Venue, on_delete=models.CASCADE, related_name='courts')
+    type = models.CharField(max_length=20, choices=[('indoor', 'Indoor'), ('outdoor', 'Outdoor')])
     name = models.CharField(max_length=100)
     sport = models.ForeignKey(Sport, on_delete=models.CASCADE)
 
