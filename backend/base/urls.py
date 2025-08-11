@@ -23,6 +23,7 @@ urlpatterns = [
     path('venues/<int:venue_id>/reviews/add/', ReviewCreateView.as_view(), name='review-add'),
     path('reviews/<int:pk>/edit/', ReviewUpdateView.as_view(), name='review-edit'),
     path('reviews/<int:pk>/delete/', ReviewDeleteView.as_view(), name='review-delete'),
+    path('venues/<int:venue_id>/report/', VenueReportCreateView.as_view(), name='venue-report'),
 
     # Facility Owner
     path('owner/venues/all/', OwnerVenueListView.as_view(), name='owner-venues-list'),

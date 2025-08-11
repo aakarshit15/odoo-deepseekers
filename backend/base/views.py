@@ -195,3 +195,24 @@ class ReviewDeleteView(generics.DestroyAPIView):
 
     def get_queryset(self):
         return super().get_queryset().filter(user=self.request.user)
+    
+class VenueReportCreateView(generics.CreateAPIView):
+    serializer_class = ReportSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        venue_id = kwargs.get('venue_id')
+        venue = get_object_or_404(Venue, id=venue_id, is_approved=True)
+
+        reason = request.data.get('reason')
+        if not reason:
+            return Response({"detail": "Reason is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        report = Report.objects.create(
+            reported_by=request.user,
+            report_type='venue',
+            venue=venue,
+            reason=reason
+        )
+
+        return Response(ReportSerializer(report, context={'request': request}).data, status=status.HTTP_201_CREATED)
