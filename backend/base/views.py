@@ -216,3 +216,220 @@ class VenueReportCreateView(generics.CreateAPIView):
         )
 
         return Response(ReportSerializer(report, context={'request': request}).data, status=status.HTTP_201_CREATED)
+    
+class VenueCourtsAvailabilityView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, venue_id):
+        venue = get_object_or_404(Venue, id=venue_id, is_approved=True)
+        sport_id = request.query_params.get("sport_id")
+        date_str = request.query_params.get("date", str(date.today()))
+
+        courts_qs = venue.courts.all()
+        if sport_id:
+            courts_qs = courts_qs.filter(sport_id=sport_id)
+
+        courts_data = []
+        for court in courts_qs:
+
+            slots = CourtAvailability.objects.filter(court=court).order_by("start_time")
+
+            # remove already booked or blocked for that date
+            booked_slots = Booking.objects.filter(
+                court=court, date=date_str, status__in=["confirmed", "pending"]
+            ).values_list("slot_start", "slot_end")
+
+            blocked_slots = BlockedSlot.objects.filter(
+                court=court, date=date_str
+            ).values_list("start_time", "end_time")
+
+            unavailable = set(booked_slots) | set(blocked_slots)
+            available_slots = [s for s in slots if (s.start_time, s.end_time) not in unavailable]
+
+            courts_data.append({
+                "court_id": court.id,
+                "court_name": court.name,
+                "sport": court.sport.name,
+                "type": court.type,
+                "slots": [
+                    {
+                        "id": slot.id,
+                        "day_type": slot.day_type,
+                        "start_time": slot.start_time,
+                        "end_time": slot.end_time,
+                        "price_per_hour": slot.price_per_hour
+                    }
+                    for slot in available_slots
+    ]
+})
+
+        return Response({
+            "venue": {
+                "id": venue.id,
+                "name": venue.name,
+                "city": venue.city,
+                "locality": venue.locality
+            },
+            "date": date_str,
+            "courts": courts_data
+        })
+    
+class BookingCreateView(generics.CreateAPIView):
+    serializer_class = BookingSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        user = request.user
+        court_slots = request.data.get("court_slots", [])
+        booking_date = request.data.get("date")
+
+        if not court_slots or not booking_date:
+            return Response(
+                {"detail": "date and court_slots are required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            booking_date = datetime.strptime(booking_date, "%Y-%m-%d").date()
+        except ValueError:
+            return Response({"detail": "Invalid date format, use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if booking_date < timezone.now().date():
+            return Response({"detail": "Cannot book past dates"}, status=status.HTTP_400_BAD_REQUEST)
+
+        total_price = 0
+        bookings_to_create = []
+
+        for cs in court_slots:
+            court_id = cs.get("court_id")
+            slot_start = cs.get("slot_start")
+            slot_end = cs.get("slot_end")
+
+            if not (court_id and slot_start and slot_end):
+                return Response({"detail": "Each court slot must have court_id, slot_start, slot_end"},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                slot_start_time = datetime.strptime(slot_start, "%H:%M").time()
+                slot_end_time = datetime.strptime(slot_end, "%H:%M").time()
+            except ValueError:
+                return Response({"detail": "Invalid time format, use HH:MM"}, status=status.HTTP_400_BAD_REQUEST)
+
+            court = get_object_or_404(Court, id=court_id)
+
+            # Check if slot is blocked
+            if BlockedSlot.objects.filter(
+                court=court,
+                date=booking_date,
+                start_time__lt=slot_end_time,
+                end_time__gt=slot_start_time
+            ).exists():
+                return Response({"detail": f"Slot {slot_start}-{slot_end} for court '{court.name}' is blocked"},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            # Check if slot is already booked
+            if Booking.objects.filter(
+                court=court,
+                date=booking_date,
+                slot_start=slot_start_time,
+                slot_end=slot_end_time
+            ).exists():
+                return Response({"detail": f"Slot {slot_start}-{slot_end} for court '{court.name}' is already booked"},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            # Get price from availability
+            availability = CourtAvailability.objects.filter(
+                court=court,
+                start_time=slot_start_time,
+                end_time=slot_end_time
+            ).first()
+
+            if not availability:
+                return Response({"detail": f"No availability found for {slot_start}-{slot_end} in court '{court.name}'"},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            total_price += float(availability.price_per_hour)
+
+            bookings_to_create.append(Booking(
+                user=user,
+                court=court,
+                date=booking_date,
+                slot_start=slot_start_time,
+                slot_end=slot_end_time,
+                price=availability.price_per_hour,
+                status="pending" 
+            ))
+
+        # Save all bookings
+        Booking.objects.bulk_create(bookings_to_create)
+
+        return Response({
+            "detail": "Booking created successfully",
+            "total_price": total_price,
+            "bookings": BookingSerializer(bookings_to_create, many=True).data
+        }, status=status.HTTP_201_CREATED)
+    
+    
+class CanDeleteBooking(permissions.BasePermission):
+    def has_object_permission(self, request, view, obj):
+        return (
+            request.user == obj.user or
+            (request.user.role == 'facility_owner' and obj.court.venue.owner == request.user) or
+            request.user.is_staff
+        )
+
+class BookingDeleteView(generics.DestroyAPIView):
+    queryset = Booking.objects.all()
+    permission_classes = [permissions.IsAuthenticated, CanDeleteBooking]
+
+    def delete(self, request, *args, **kwargs):
+        booking = self.get_object()
+        now = timezone.now()
+
+        booking_start = timezone.make_aware(
+            timezone.datetime.combine(booking.date, booking.slot_start)
+        )
+
+        # Restrict if booking already started
+        if booking_start <= now:
+            return Response(
+                {"detail": "Cannot delete past or ongoing bookings."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        booking.delete()
+        return Response({"detail": "Booking deleted successfully."}, status=status.HTTP_200_OK)
+    
+class MyBookingsView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        now = timezone.now()
+        today = now.date()
+
+        # Past = date < today OR (date == today and slot_end < now.time())
+        past_bookings = Booking.objects.filter(
+            user=request.user
+        ).filter(
+            date__lt=today
+        ) | Booking.objects.filter(
+            user=request.user,
+            date=today,
+            slot_end__lt=now.time()
+        )
+
+        # Upcoming = date > today OR (date == today and slot_end >= now.time())
+        upcoming_bookings = Booking.objects.filter(
+            user=request.user
+        ).filter(
+            date__gt=today
+        ) | Booking.objects.filter(
+            user=request.user,
+            date=today,
+            slot_end__gte=now.time()
+        )
+
+        return Response({
+            "past": BookingSerializer(past_bookings.order_by("-date", "-slot_start"), many=True).data,
+            "upcoming": BookingSerializer(upcoming_bookings.order_by("date", "slot_start"), many=True).data
+        })
