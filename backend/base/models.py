@@ -117,6 +117,24 @@ class Booking(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.court.name} - {self.date}"
+    
+class BlockedSlot(models.Model):
+    court = models.ForeignKey(Court, on_delete=models.CASCADE, related_name='blocked_slots')
+    date = models.DateField()
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    reason = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['court', 'date', 'start_time', 'end_time'],
+                name='unique_blocked_slot'
+            )
+        ]
+
+    def __str__(self):
+        return f"Blocked: {self.court.name} on {self.date}"
 
 
 class Review(models.Model):
@@ -138,3 +156,19 @@ class Review(models.Model):
 
     def __str__(self):
         return f"Review by {self.user.username} for {self.venue.name}"
+    
+class Report(models.Model):
+    REPORT_TYPE_CHOICES = [
+        ('venue', 'Venue'),
+        ('user', 'User'),
+    ]
+    reported_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reports_made')
+    report_type = models.CharField(max_length=20, choices=REPORT_TYPE_CHOICES)
+    venue = models.ForeignKey(Venue, on_delete=models.CASCADE, null=True, blank=True, related_name='reports')
+    reported_user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='reports_received')
+    reason = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_resolved = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Report by {self.reported_by.username} - {self.report_type}"

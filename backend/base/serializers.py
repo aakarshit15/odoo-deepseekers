@@ -7,7 +7,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'email', 'role', 'avatar',
             'city', 'locality', 'full_address',
-            'latitude', 'longitude'
+            'latitude', 'longitude', 'is_active'
         ]
 
 
@@ -72,3 +72,22 @@ class ReviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Review
         fields = ['id', 'user', 'venue', 'rating', 'comment', 'created_at']
+
+
+class BlockedSlotSerializer(serializers.ModelSerializer):
+    court = CourtSerializer()
+    class Meta:
+        model = BlockedSlot
+        fields = ['id', 'court', 'date', 'start_time', 'end_time', 'reason']
+
+
+class ReportSerializer(serializers.ModelSerializer):
+    reported_by = UserSerializer(read_only=True)
+    venue = VenueShortSerializer(read_only=True)
+    reported_user = UserSerializer(read_only=True)
+    class Meta:
+        model = Report
+        fields = [
+            'id', 'report_type', 'reported_by', 'venue',
+            'reported_user', 'reason', 'created_at', 'is_resolved'
+        ]
