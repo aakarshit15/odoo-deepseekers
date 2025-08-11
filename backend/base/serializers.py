@@ -38,7 +38,7 @@ class SignupSerializer(serializers.ModelSerializer):
             'id', 'username', 'email', 'password', 'role', 'avatar',
             'city', 'locality', 'full_address', 'latitude', 'longitude'
         ]
-        read_only_fields = ['id', 'username']  # Make username read-only since we auto-generate it
+        read_only_fields = ['id', 'username']
 
     def validate_email(self, value):
         if User.objects.filter(email__iexact=value).exists():
@@ -46,43 +46,27 @@ class SignupSerializer(serializers.ModelSerializer):
         return value
 
     def to_internal_value(self, data):
-        # Fix decimal places before validation
         if 'latitude' in data and data['latitude']:
             try:
                 data = data.copy()
                 data['latitude'] = str(round(float(data['latitude']), 6))
             except (ValueError, TypeError):
                 pass
-                
         if 'longitude' in data and data['longitude']:
             try:
                 data = data.copy()
                 data['longitude'] = str(round(float(data['longitude']), 6))
             except (ValueError, TypeError):
                 pass
-        
         return super().to_internal_value(data)
 
     def validate(self, attrs):
-        print("=== VALIDATION DEBUG ===")
-        print("Original attrs:", attrs)
-        
-        # Convert frontend field names to backend field names
         if 'fullAddress' in attrs:
             attrs['full_address'] = attrs.pop('fullAddress')
-            print("Converted fullAddress to full_address")
-        
-        print("After conversion:", attrs)
-        
-        # Ensure required fields are present
         required_fields = ['email', 'password', 'city', 'full_address']
         for field in required_fields:
             if field not in attrs:
-                print(f"Missing required field: {field}")
                 raise serializers.ValidationError(f"{field} is required.")
-        
-        print("All required fields present")
-        print("================================")
         return attrs
 
     def create(self, validated_data):
@@ -90,10 +74,9 @@ class SignupSerializer(serializers.ModelSerializer):
         username = validated_data.get('username') or _make_username_from_email(validated_data['email'])
         user = User(**validated_data)
         user.username = username
-        user.is_active = False  # wait until OTP verified
+        user.is_active = False
         user.set_password(password)
         user.save()
-        # create and send OTP
         code = f"{random.randint(100000, 999999):06d}"
         expires_at = timezone.now() + timedelta(minutes=10)
         EmailOTP.objects.create(user=user, code=code, expires_at=expires_at, purpose='signup')
@@ -164,12 +147,9 @@ class ChangePasswordSerializer(serializers.Serializer):
         user = request.user
         user.set_password(self.validated_data['new_password'])
         user.save()
-
-        # Invalidate all JWT refresh tokens for this user
         tokens = OutstandingToken.objects.filter(user=user)
         for token in tokens:
             BlacklistedToken.objects.get_or_create(token=token)
-
         return user
 
 
@@ -206,9 +186,10 @@ class VenueDetailSerializer(serializers.ModelSerializer):
         model = Venue
         fields = '__all__'
 
+
 class VenueCreateSerializer(serializers.ModelSerializer):
     sports = serializers.ListField(
-        child=serializers.IntegerField(), write_only=True, help_text="List of sport IDs"
+        child=serializers.IntegerField(), write_only=True
     )
 
     class Meta:
@@ -220,6 +201,7 @@ class VenueCreateSerializer(serializers.ModelSerializer):
         venue = Venue.objects.create(**validated_data)
         venue.sports.set(sports)
         return venue
+
 
 class CourtAvailabilitySerializer(serializers.ModelSerializer):
     class Meta:
@@ -233,10 +215,11 @@ class CourtSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Court
-        fields = ['id', 'name', 'sport', 'price_per_hour', 'availability']
+        fields = ['id', 'name', 'sport', 'availability']
 
 
 class BookingSerializer(serializers.ModelSerializer):
+    user = UserSerializer()
     court = CourtSerializer()
 
     class Meta:
