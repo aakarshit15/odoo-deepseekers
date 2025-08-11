@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'cloudinary',
     'cloudinary_storage',
     'base',
+    'payment',
 ]
 
 REST_FRAMEWORK = {
@@ -170,3 +171,7 @@ MEDIA_URL = '/media/'
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# PayPal Settings
+PAYPAL_CLIENT_ID = config('PAYPAL_CLIENT_ID')
+PAYPAL_CURRENCY = config('PAYPAL_CURRENCY', default='USD')

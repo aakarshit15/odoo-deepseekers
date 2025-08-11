@@ -1,1 +1,6 @@
 .env
+venv/
+__pycache__/
+*.sqlite3
+base/migrations
+payment/migrations
