@@ -177,63 +177,49 @@ export const sportsApi = {
   },
 };
 
-// Venue API for owners
-export const venueApi = {
-  create: async (venueData: {
-    name: string;
-    description: string;
-    city: string;
-    locality?: string;
-    full_address: string;
-    latitude?: number;
-    longitude?: number;
-    sports: number[]; // Backend expects 'sports' field
-    amenities: string[];
-    starting_price_per_hour: number;
-  }) => {
+// Owner API - Complete integration based on backend docs
+export const ownerApi = {
+  // Dashboard analytics
+  getDashboard: async () => {
     const { accessToken } = getStoredTokens();
-    
-    if (!accessToken) {
-      return {
-        error: "Authentication required. Please log in again."
-      };
-    }
-
-    console.log('Creating venue with data:', venueData);
-    console.log('Using access token:', accessToken ? 'Present' : 'Missing');
+    if (!accessToken) return { error: "Authentication required" };
 
     return fetchApi<{
-      id: number;
-      name: string;
-      description: string;
-      city: string;
-      locality: string;
-      full_address: string;
-      latitude: number | null;
-      longitude: number | null;
-      sports: number[]; // Backend returns 'sports' field
-      amenities: string[];
-      starting_price_per_hour: number;
-      is_approved: boolean;
-      owner: number;
-    }>("/owner/venues/", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(venueData),
+      kpis: {
+        total_bookings: number;
+        active_courts: number;
+        earnings: number;
+        today_bookings: number;
+      };
+      calendar: Array<{
+        date: string;
+        count: number;
+        total_earnings: number;
+      }>;
+      trends: {
+        daily: any[];
+        weekly: any[];
+        monthly: any[];
+      };
+      earnings_summary: {
+        daily: number;
+        weekly: number;
+        monthly: number;
+      };
+      peak_hours: Array<{
+        hour: number;
+        count: number;
+      }>;
+    }>("/owner/dashboard/", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
   },
 
-  getOwnerVenues: async () => {
+  // List all owner venues with full details
+  getVenues: async () => {
     const { accessToken } = getStoredTokens();
-    
-    if (!accessToken) {
-      return {
-        error: "Authentication required. Please log in again."
-      };
-    }
+    if (!accessToken) return { error: "Authentication required" };
 
     return fetchApi<Array<{
       id: number;
@@ -242,18 +228,368 @@ export const venueApi = {
       city: string;
       locality: string;
       full_address: string;
-      latitude: number | null;
-      longitude: number | null;
-      sports: number[]; // Backend returns 'sports' field
-      amenities: string[];
-      starting_price_per_hour: number;
+      latitude: string;
+      longitude: string;
+      starting_price_per_hour: string;
+      rating: number | null;
+      popularity_score: string;
       is_approved: boolean;
+      created_at: string;
+      amenities: string[];
+      sports: Array<{ id: number; name: string }>;
+      photos: any[];
       owner: number;
-    }>>("/owner/venues/", {
+    }>>("/owner/venues/all/", {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
   },
+
+  // Create venue
+  createVenue: async (venueData: {
+    name: string;
+    description: string;
+    city: string;
+    locality?: string;
+    full_address: string;
+    latitude?: number;
+    longitude?: number;
+    sport_ids: number[];
+    amenities: string[];
+    starting_price_per_hour: number;
+  }) => {
+    const { accessToken } = getStoredTokens();
+    if (!accessToken) return { error: "Authentication required" };
+
+    return fetchApi("/owner/venues/", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(venueData),
+    });
+  },
+
+  // Update venue
+  updateVenue: async (venueId: number, venueData: any) => {
+    const { accessToken } = getStoredTokens();
+    if (!accessToken) return { error: "Authentication required" };
+
+    return fetchApi(`/owner/venues/${venueId}/`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(venueData),
+    });
+  },
+
+  // Upload venue photos
+  uploadVenuePhoto: async (venueId: number, imageFile: File) => {
+    const { accessToken } = getStoredTokens();
+    if (!accessToken) return { error: "Authentication required" };
+
+    const formData = new FormData();
+    formData.append('image', imageFile);
+
+    return fetchApi(`/owner/venues/${venueId}/photos/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: formData,
+    });
+  },
+
+  // Get owner bookings
+  getBookings: async () => {
+    const { accessToken } = getStoredTokens();
+    if (!accessToken) return { error: "Authentication required" };
+
+    return fetchApi<Array<{
+      id: number;
+      user_name: string;
+      court_name: string;
+      time: string;
+      status: string;
+    }>>("/owner/bookings/", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  },
+
+  // Court management
+  createCourt: async (courtData: {
+    venue_id: number;
+    type: "indoor" | "outdoor";
+    name: string;
+    sport: { id: number; name: string };
+  }) => {
+    const { accessToken } = getStoredTokens();
+    if (!accessToken) return { error: "Authentication required" };
+
+    return fetchApi("/owner/courts/", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(courtData),
+    });
+  },
+
+  updateCourt: async (courtId: number, courtData: any) => {
+    const { accessToken } = getStoredTokens();
+    if (!accessToken) return { error: "Authentication required" };
+
+    return fetchApi(`/owner/courts/${courtId}/`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(courtData),
+    });
+  },
+
+  // Court availability
+  addAvailability: async (courtId: number, availabilityData: {
+    day_type: "mon_fri" | "sat_sun" | "holidays";
+    start_time: string;
+    end_time: string;
+    price_per_hour: number;
+  }) => {
+    const { accessToken } = getStoredTokens();
+    if (!accessToken) return { error: "Authentication required" };
+
+    return fetchApi(`/owner/courts/${courtId}/availability/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(availabilityData),
+    });
+  },
+
+  updateAvailability: async (availabilityId: number, availabilityData: any) => {
+    const { accessToken } = getStoredTokens();
+    if (!accessToken) return { error: "Authentication required" };
+
+    return fetchApi(`/owner/availability/${availabilityId}/`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(availabilityData),
+    });
+  },
+
+  // Block court slot
+  blockSlot: async (courtId: number, blockData: {
+    date: string;
+    start_time: string;
+    end_time: string;
+    reason?: string;
+  }) => {
+    const { accessToken } = getStoredTokens();
+    if (!accessToken) return { error: "Authentication required" };
+
+    return fetchApi(`/owner/courts/${courtId}/block/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(blockData),
+    });
+  },
+};
+
+// Profile API
+export const profileApi = {
+  getProfile: async () => {
+    const { accessToken } = getStoredTokens();
+    if (!accessToken) return { error: "Authentication required" };
+
+    return fetchApi("/profile/", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  },
+
+  updateProfile: async (profileData: any) => {
+    const { accessToken } = getStoredTokens();
+    if (!accessToken) return { error: "Authentication required" };
+
+    return fetchApi("/profile/", {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(profileData),
+    });
+  },
+
+  changePassword: async (passwordData: {
+    old_password: string;
+    new_password: string;
+    new_password2: string;
+  }) => {
+    const { accessToken } = getStoredTokens();
+    if (!accessToken) return { error: "Authentication required" };
+
+    return fetchApi("/profile/change-password/", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(passwordData),
+    });
+  },
+};
+
+// Admin API
+export const adminApi = {
+  getDashboard: async () => {
+    const { accessToken } = getStoredTokens();
+    if (!accessToken) return { error: "Authentication required" };
+
+    return fetchApi<{
+      total_users: number;
+      total_facility_owners: number;
+      total_bookings: number;
+      total_active_courts: number;
+      booking_activity: any[];
+      user_registration_trends: any[];
+      facility_approval_trends: any[];
+      most_active_sports: any[];
+      earnings_simulation: number;
+    }>("/admin/dashboard/", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  },
+
+  getPendingVenues: async () => {
+    const { accessToken } = getStoredTokens();
+    if (!accessToken) return { error: "Authentication required" };
+
+    return fetchApi("/admin/venues/pending/", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  },
+
+  approveVenue: async (venueId: number) => {
+    const { accessToken } = getStoredTokens();
+    if (!accessToken) return { error: "Authentication required" };
+
+    return fetchApi(`/admin/venues/${venueId}/approve/`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  },
+
+  rejectVenue: async (venueId: number) => {
+    const { accessToken } = getStoredTokens();
+    if (!accessToken) return { error: "Authentication required" };
+
+    return fetchApi(`/admin/venues/${venueId}/reject/`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  },
+
+  getUsers: async (filters?: { role?: string; status?: string }) => {
+    const { accessToken } = getStoredTokens();
+    if (!accessToken) return { error: "Authentication required" };
+
+    const params = new URLSearchParams();
+    if (filters?.role) params.append('role', filters.role);
+    if (filters?.status) params.append('status', filters.status);
+
+    return fetchApi(`/admin/users/?${params.toString()}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  },
+
+  banUser: async (userId: number) => {
+    const { accessToken } = getStoredTokens();
+    if (!accessToken) return { error: "Authentication required" };
+
+    return fetchApi(`/admin/users/${userId}/ban/`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  },
+
+  unbanUser: async (userId: number) => {
+    const { accessToken } = getStoredTokens();
+    if (!accessToken) return { error: "Authentication required" };
+
+    return fetchApi(`/admin/users/${userId}/unban/`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  },
+};
+
+// Public API
+export const publicApi = {
+  getHomeData: async () => {
+    return fetchApi<{
+      popular_venues: any[];
+      popular_sports: any[];
+    }>("/home/", {
+      method: "GET",
+    });
+  },
+
+  getVenues: async (filters?: {
+    city?: string;
+    search?: string;
+    type?: string;
+    price_min?: number;
+    price_max?: number;
+    sport?: number;
+    rating_min?: number;
+    is_approved?: boolean;
+    sort?: string;
+    page?: number;
+    page_size?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined) params.append(key, value.toString());
+      });
+    }
+
+    return fetchApi(`/venues/?${params.toString()}`, {
+      method: "GET",
+    });
+  },
+
+  getVenueById: async (venueId: string) => {
+    return fetchApi<{
+      id: number;
+      name: string;
+      description: string;
+      city: string;
+      locality: string;
+      full_address: string;
+      latitude: string;
+      longitude: string;
+      starting_price_per_hour: string;
+      rating: number | null;
+      popularity_score: string;
+      is_approved: boolean;
+      created_at: string;
+      amenities: string[];
+      sports: Array<{ id: number; name: string }>;
+      photos: any[];
+      owner: number;
+    }>(`/venues/${venueId}/`, {
+      method: "GET",
+    });
+  },
+
+  getCourts: async (venueId: string) => {
+    return fetchApi<{
+      results: Array<{
+        id: number;
+        name: string;
+        sport: string;
+        price_per_hour: number;
+        type: string;
+        venue: number;
+      }>;
+    }>(`/venues/${venueId}/courts/`, {
+      method: "GET",
+    });
+  },
+};
+
+// Legacy venue API (keeping for backward compatibility)
+export const venueApi = {
+  create: ownerApi.createVenue,
+  getOwnerVenues: ownerApi.getVenues,
 };

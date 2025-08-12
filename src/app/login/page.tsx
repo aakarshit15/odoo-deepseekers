@@ -42,7 +42,15 @@ export default function LoginPage() {
         storeAuthTokens({ refresh, access });
         storeUserData(user);
         toast.success("Login successful!");
-        router.push("/profile");
+        if(user.role === "user"){
+          router.push("/");
+        }
+        else if(user.role === "owner"){
+          router.push("/owner-dashboard");
+        }
+        else if(user.role === "admin"){
+          router.push("/admin-venues");
+        }
       }
     } catch (error) {
       toast.error("An error occurred during login");

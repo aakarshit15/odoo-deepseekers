@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Plus, X, MapPin, DollarSign } from "lucide-react";
 import { toast } from "sonner";
-import { sportsApi, venueApi } from "@/lib/api";
+import { sportsApi, ownerApi } from "@/lib/api";
 import { getUserData } from "@/lib/auth";
 
 interface Sport {
@@ -220,7 +220,7 @@ export default function CreateVenuePage() {
         full_address: formData.full_address.trim(),
         latitude: formData.latitude ? parseFloat(formData.latitude) : undefined,
         longitude: formData.longitude ? parseFloat(formData.longitude) : undefined,
-        sports: formData.sport_ids, // Backend expects 'sports' not 'sport_ids'
+        sport_ids: formData.sport_ids, // Backend expects 'sport_ids' according to docs
         amenities: formData.amenities,
         starting_price_per_hour: parseFloat(formData.starting_price_per_hour),
       };
@@ -228,9 +228,9 @@ export default function CreateVenuePage() {
       console.log("Submitting venue data:", venueData);
       console.log("Current user:", currentUser);
       console.log("Sports selected:", formData.sport_ids);
-      console.log("Final sports field:", venueData.sports);
+      console.log("Final sport_ids field:", venueData.sport_ids);
 
-      const response = await venueApi.create(venueData);
+      const response = await ownerApi.createVenue(venueData);
 
       console.log("Venue creation response:", response);
 

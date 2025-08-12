@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { LogOut, User, Building, Plus } from "lucide-react";
+import { LogOut, User, Building, Plus, Calendar } from "lucide-react";
 import { getUserData, clearAuthData, isLoggedIn } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -78,6 +78,14 @@ export function Navigation() {
               </>
             ) : (
               <div className="flex items-center gap-4">
+                {/* Public navigation */}
+                <Link href="/venues">
+                  <Button variant="ghost" size="sm">
+                    <Building className="mr-2 h-4 w-4" />
+                    Venues
+                  </Button>
+                </Link>
+
                 {/* Owner-specific navigation */}
                 {user?.role === "owner" && (
                   <>
@@ -94,6 +102,16 @@ export function Navigation() {
                       </Button>
                     </Link>
                   </>
+                )}
+
+                {/* Admin-specific navigation */}
+                {user?.role === "admin" && (
+                  <Link href="/admin-dashboard">
+                    <Button variant="ghost" size="sm">
+                      <Building className="mr-2 h-4 w-4" />
+                      Admin
+                    </Button>
+                  </Link>
                 )}
 
                 {/* User dropdown */}
@@ -130,13 +148,35 @@ export function Navigation() {
                         <DropdownMenuItem asChild>
                           <Link href="/owner-dashboard" className="cursor-pointer">
                             <Building className="mr-2 h-4 w-4" />
-                            My Venues
+                            Dashboard
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/owner-bookings" className="cursor-pointer">
+                            <Calendar className="mr-2 h-4 w-4" />
+                            Bookings
                           </Link>
                         </DropdownMenuItem>
                         <DropdownMenuItem asChild>
                           <Link href="/create-venue" className="cursor-pointer">
                             <Plus className="mr-2 h-4 w-4" />
                             Add Venue
+                          </Link>
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    {user?.role === "admin" && (
+                      <>
+                        <DropdownMenuItem asChild>
+                          <Link href="/admin-dashboard" className="cursor-pointer">
+                            <Building className="mr-2 h-4 w-4" />
+                            Admin Dashboard
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/admin-venues" className="cursor-pointer">
+                            <Building className="mr-2 h-4 w-4" />
+                            Manage Venues
                           </Link>
                         </DropdownMenuItem>
                       </>

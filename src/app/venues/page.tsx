@@ -1,357 +1,405 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import VenuesGrid from "../../components/VenuesGrid";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
-import { useState } from "react";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, MapPin, DollarSign, Star, Search, Filter } from "lucide-react";
+import { toast } from "sonner";
+import { publicApi, sportsApi } from "@/lib/api";
+import { Navigation } from "@/components/Navigation";
+
+interface Venue {
+  id: number;
+  name: string;
+  description: string;
+  city: string;
+  locality: string;
+  full_address: string;
+  starting_price_per_hour: string;
+  rating: number | null;
+  amenities: string[];
+  sports: Array<{ id: number; name: string }>;
+  photos: any[];
+}
+
+interface Sport {
+  id: number;
+  name: string;
+}
 
 export default function VenuesPage() {
-  const [priceRange, setPriceRange] = useState([500, 2000]);
-  const sports = [
-    "Basketball",
-    "Cricket",
-    "Football",
-    "Tennis",
-    "Swimming",
-    "Badminton",
-    "Table Tennis",
-    "Volleyball",
-  ];
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [venues, setVenues] = useState<Venue[]>([]);
+  const [sports, setSports] = useState<Sport[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSearching, setIsSearching] = useState(false);
+  const [filters, setFilters] = useState({
+    search: "",
+    city: "",
+    sport: "",
+    price_min: "",
+    price_max: "",
+    sort: "popularity",
+  });
+  const [pagination, setPagination] = useState({
+    page: 1,
+    hasNext: false,
+    hasPrevious: false,
+    total: 0,
+  });
+
+  // Initialize filters from URL parameters
+  useEffect(() => {
+    const city = searchParams.get('city') || '';
+    const sport = searchParams.get('sport') || '';
+    const search = searchParams.get('search') || '';
+    
+    setFilters(prev => ({
+      ...prev,
+      city,
+      sport,
+      search,
+    }));
+  }, [searchParams]);
+
+  // Fetch sports for filter
+  useEffect(() => {
+    const fetchSports = async () => {
+      try {
+        const response = await sportsApi.getAll();
+        if (response.data && Array.isArray(response.data)) {
+          setSports(response.data);
+        }
+      } catch (error) {
+        console.error("Error fetching sports:", error);
+      }
+    };
+    fetchSports();
+  }, []);
+
+  // Fetch venues
+  const fetchVenues = async (page = 1) => {
+    setIsSearching(true);
+    try {
+      const searchFilters = {
+        ...filters,
+        page,
+        page_size: 12,
+        is_approved: true,
+        price_min: filters.price_min ? parseFloat(filters.price_min) : undefined,
+        price_max: filters.price_max ? parseFloat(filters.price_max) : undefined,
+        sport: filters.sport ? parseInt(filters.sport) : undefined,
+      };
+
+      // Remove empty filters
+      Object.keys(searchFilters).forEach(key => {
+        if (searchFilters[key as keyof typeof searchFilters] === "" || 
+            searchFilters[key as keyof typeof searchFilters] === undefined) {
+          delete searchFilters[key as keyof typeof searchFilters];
+        }
+      });
+
+      const response = await publicApi.getVenues(searchFilters);
+      
+      if (response.error) {
+        toast.error("Failed to load venues: " + response.error);
+        setVenues([]);
+      } else if (response.data) {
+        setVenues(response.data.results || response.data);
+        setPagination({
+          page,
+          hasNext: !!response.data.next,
+          hasPrevious: !!response.data.previous,
+          total: response.data.count || 0,
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching venues:", error);
+      toast.error("Failed to load venues");
+    } finally {
+      setIsSearching(false);
+      setIsLoading(false);
+    }
+  };
+
+  // Initial load
+  useEffect(() => {
+    fetchVenues();
+  }, []);
+
+  const handleFilterChange = (key: string, value: string) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleSearch = () => {
+    setPagination(prev => ({ ...prev, page: 1 }));
+    fetchVenues(1);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    fetchVenues(newPage);
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      search: "",
+      city: "",
+      sport: "",
+      price_min: "",
+      price_max: "",
+      sort: "popularity",
+    });
+    fetchVenues(1);
+  };
+
   return (
-    <div className="min-h-screen bg-[#F9FAFB] dark:bg-[#1E1E1E] text-[#2D3436]">
-      <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <header className="flex justify-between items-center mb-8">
-          <div className="flex items-center">
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#2ECC71]">
-              QUICKCOURT
-            </h1>
-          </div>
-        </header>
+    <div className="min-h-screen bg-[#F9FAFB] dark:bg-[#1E1E1E]">
+      <Navigation />
+      <div className="container mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-[#2ECC71] mb-2">Find Sports Venues</h1>
+          <p className="text-[#636E72]">
+            Discover and book amazing sports facilities near you
+          </p>
+        </div>
 
-        <main>
-          <div className="flex flex-col sm:flex-row gap-6">
-            {/* Filters Section */}
-            <aside className="w-full sm:w-64 space-y-6 hidden sm:block">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold">Filters</h2>
-                <button
-                  onClick={() => {
-                    setPriceRange([500, 2000]);
-                    // Add other filter reset logic here
-                  }}
-                  className="text-sm text-[#2ECC71] hover:text-[#27AE60] transition-colors"
-                >
-                  Clear All
-                </button>
+        {/* Search and Filters */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="text-xl text-[#2D3436] dark:text-white flex items-center gap-2">
+              <Filter className="h-5 w-5" />
+              Search & Filter
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Search Bar */}
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search venues..."
+                  value={filters.search}
+                  onChange={(e) => handleFilterChange("search", e.target.value)}
+                  className="pl-10"
+                  onKeyPress={(e) => e.key === "Enter" && handleSearch()}
+                />
               </div>
-              <div className="bg-white dark:bg-[#2C2C2C] rounded-lg p-4 shadow-sm">
-                <h3 className="text-lg font-semibold mb-4">Select Sports</h3>
-                <Select>
-                  <SelectTrigger className="w-full border-[#DADADA]">
-                    <SelectValue placeholder="Select a sport" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectLabel>Sports</SelectLabel>
-                      {sports.map((sport) => (
-                        <SelectItem key={sport} value={sport.toLowerCase()}>
-                          {sport}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="bg-white dark:bg-[#2C2C2C] rounded-lg p-4 shadow-sm">
-                <h3 className="text-lg font-semibold mb-4">Price Range</h3>
-                <div className="space-y-6">
-                  <Slider
-                    defaultValue={[500, 2000]}
-                    min={0}
-                    max={5000}
-                    step={100}
-                    value={priceRange}
-                    onValueChange={setPriceRange}
-                    className="[&_[role=slider]]:bg-[#2ECC71]"
-                  />
-                  <div className="flex justify-between text-sm text-[#636E72]">
-                    <span>₹{priceRange[0]}</span>
-                    <span>₹{priceRange[1]}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white dark:bg-[#2C2C2C] rounded-lg p-4 shadow-sm">
-                <h3 className="text-lg font-semibold mb-4">Venue Type</h3>
-                <div className="space-y-2">
-                  {["Indoor", "Outdoor"].map((type) => (
-                    <label key={type} className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        className="rounded border-[#DADADA] text-[#2ECC71] focus:ring-[#2ECC71]"
-                      />
-                      <span className="text-sm text-[#2D3436] dark:text-gray-300">
-                        {type}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="bg-white dark:bg-[#2C2C2C] rounded-lg p-4 shadow-sm">
-                <h3 className="text-lg font-semibold mb-4">Rating</h3>
-                <div className="space-y-2">
-                  {[
-                    "⭐⭐⭐⭐⭐ 5.0",
-                    "⭐⭐⭐⭐ 4.0+",
-                    "⭐⭐⭐ 3.0+",
-                    "⭐⭐ 2.0+",
-                    "⭐ 1.0+",
-                  ].map((rating) => (
-                    <label key={rating} className="flex items-center space-x-2">
-                      <input
-                        type="radio"
-                        name="rating"
-                        className="border-[#DADADA] text-[#2ECC71] focus:ring-[#2ECC71]"
-                      />
-                      <span className="text-sm text-[#2D3436] dark:text-gray-300">
-                        {rating}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  // Add apply filters logic here
-                }}
-                className="w-full mt-6 bg-[#2ECC71] hover:bg-[#27AE60] text-white py-2 px-4 rounded-lg transition-colors"
+              <Button 
+                onClick={handleSearch} 
+                disabled={isSearching}
+                className="bg-[#2ECC71] hover:bg-[#27AE60]"
               >
-                Apply Filters
-              </button>
-            </aside>
-
-            {/* Mobile Filter Button */}
-            <div className="sm:hidden mb-4">
-              <Sheet>
-                <SheetTrigger asChild>
-                  <button className="w-full bg-white dark:bg-[#2C2C2C] text-[#2D3436] dark:text-white px-4 py-2 rounded-lg border border-[#DADADA] flex items-center justify-between">
-                    <span className="flex items-center">
-                      <svg
-                        className="w-5 h-5 mr-2"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
-                        />
-                      </svg>
-                      Filters
-                    </span>
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 9l-7 7-7-7"
-                      />
-                    </svg>
-                  </button>
-                </SheetTrigger>
-                <SheetContent
-                  side="left"
-                  className="w-full sm:w-[540px] bg-[#F9FAFB] dark:bg-[#1E1E1E] p-0 flex flex-col"
-                >
-                  <div className="p-6 border-b border-[#DADADA] dark:border-gray-700">
-                    <SheetHeader>
-                      <div className="flex justify-between items-center">
-                        <SheetTitle className="text-[#2D3436] dark:text-white">
-                          Filters
-                        </SheetTitle>
-                        <button
-                          onClick={() => {
-                            setPriceRange([500, 2000]);
-                            // Add other filter reset logic here
-                          }}
-                          className="text-sm text-[#2ECC71] hover:text-[#27AE60] transition-colors"
-                        >
-                          Clear All
-                        </button>
-                      </div>
-                    </SheetHeader>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                    {/* Filter content - same as sidebar */}
-                    <div className="bg-white dark:bg-[#2C2C2C] rounded-lg p-4 shadow-sm">
-                      <h3 className="text-lg font-semibold mb-4">
-                        Select Sports
-                      </h3>
-                      <Select>
-                        <SelectTrigger className="w-full border-[#DADADA]">
-                          <SelectValue placeholder="Select a sport" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            <SelectLabel>Sports</SelectLabel>
-                            {sports.map((sport) => (
-                              <SelectItem
-                                key={sport}
-                                value={sport.toLowerCase()}
-                              >
-                                {sport}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="bg-white dark:bg-[#2C2C2C] rounded-lg p-4 shadow-sm">
-                      <h3 className="text-lg font-semibold mb-4">
-                        Price Range
-                      </h3>
-                      <div className="space-y-6">
-                        <Slider
-                          defaultValue={[500, 2000]}
-                          min={0}
-                          max={5000}
-                          step={100}
-                          value={priceRange}
-                          onValueChange={setPriceRange}
-                          className="[&_[role=slider]]:bg-[#2ECC71]"
-                        />
-                        <div className="flex justify-between text-sm text-[#636E72]">
-                          <span>₹{priceRange[0]}</span>
-                          <span>₹{priceRange[1]}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-white dark:bg-[#2C2C2C] rounded-lg p-4 shadow-sm">
-                      <h3 className="text-lg font-semibold mb-4">Venue Type</h3>
-                      <div className="space-y-2">
-                        {["Indoor", "Outdoor"].map((type) => (
-                          <label
-                            key={type}
-                            className="flex items-center space-x-2"
-                          >
-                            <input
-                              type="checkbox"
-                              className="rounded border-[#DADADA] text-[#2ECC71] focus:ring-[#2ECC71]"
-                            />
-                            <span className="text-sm text-[#2D3436] dark:text-gray-300">
-                              {type}
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="bg-white dark:bg-[#2C2C2C] rounded-lg p-4 shadow-sm">
-                      <h3 className="text-lg font-semibold mb-4">Rating</h3>
-                      <div className="space-y-2">
-                        {["⭐⭐⭐⭐⭐ 5.0", "⭐⭐⭐⭐ 4.0+", "⭐⭐⭐ 3.0+"].map(
-                          (rating) => (
-                            <label
-                              key={rating}
-                              className="flex items-center space-x-2"
-                            >
-                              <input
-                                type="radio"
-                                name="rating"
-                                className="border-[#DADADA] text-[#2ECC71] focus:ring-[#2ECC71]"
-                              />
-                              <span className="text-sm text-[#2D3436] dark:text-gray-300">
-                                {rating}
-                              </span>
-                            </label>
-                          )
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="p-6 mt-auto border-t border-[#DADADA] dark:border-gray-700">
-                    <button
-                      onClick={() => {
-                        // Add apply filters logic here
-                        const sheet = document.querySelector(
-                          '[data-state="open"]'
-                        );
-                        if (sheet) {
-                          (
-                            sheet.querySelector(
-                              'button[type="button"]'
-                            ) as HTMLButtonElement
-                          )?.click();
-                        }
-                      }}
-                      className="w-full bg-[#2ECC71] hover:bg-[#27AE60] text-white py-2 px-4 rounded-lg transition-colors"
-                    >
-                      Apply Filters
-                    </button>
-                  </div>
-                </SheetContent>
-              </Sheet>
+                {isSearching ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+              </Button>
             </div>
 
-            {/* Main Content */}
-            <div className="flex-1">
-              <div className="mb-6">
-                <div className="relative">
-                  <Input
-                    type="text"
-                    placeholder="Search venues..."
-                    className="w-full border-[#DADADA] rounded-lg pr-10"
-                  />
-                  <button className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <svg
-                      className="w-5 h-5 text-[#636E72]"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              </div>
+            {/* Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              <Input
+                placeholder="City"
+                value={filters.city}
+                onChange={(e) => handleFilterChange("city", e.target.value)}
+              />
 
-              {/* Venues Grid with Pagination */}
-              <VenuesGrid itemsPerPage={12} />
+              <Select value={filters.sport} onValueChange={(value) => handleFilterChange("sport", value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Sport" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All Sports</SelectItem>
+                  {sports.map((sport) => (
+                    <SelectItem key={sport.id} value={sport.id.toString()}>
+                      {sport.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Input
+                type="number"
+                placeholder="Min Price"
+                value={filters.price_min}
+                onChange={(e) => handleFilterChange("price_min", e.target.value)}
+              />
+
+              <Input
+                type="number"
+                placeholder="Max Price"
+                value={filters.price_max}
+                onChange={(e) => handleFilterChange("price_max", e.target.value)}
+              />
+
+              <Select value={filters.sort} onValueChange={(value) => handleFilterChange("sort", value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sort By" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="popularity">Popularity</SelectItem>
+                  <SelectItem value="price_low">Price: Low to High</SelectItem>
+                  <SelectItem value="price_high">Price: High to Low</SelectItem>
+                  <SelectItem value="rating">Rating</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
+            <div className="flex justify-between items-center">
+              <Button variant="outline" onClick={clearFilters}>
+                Clear Filters
+              </Button>
+              <p className="text-sm text-[#636E72]">
+                {pagination.total} venues found
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Loading State */}
+        {isLoading && (
+          <div className="text-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-[#2ECC71] mx-auto mb-4" />
+            <p className="text-[#636E72]">Loading venues...</p>
           </div>
-        </main>
+        )}
+
+        {/* Venues Grid */}
+        {!isLoading && (
+          <>
+            {venues.length === 0 ? (
+              <div className="text-center py-12">
+                <MapPin className="h-12 w-12 text-[#636E72] mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-[#2D3436] dark:text-white mb-2">
+                  No venues found
+                </h3>
+                <p className="text-[#636E72] mb-4">
+                  Try adjusting your search criteria or filters.
+                </p>
+                <Button onClick={clearFilters} variant="outline">
+                  Clear Filters
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                  {venues.map((venue) => (
+                    <Card key={venue.id} className="hover:shadow-lg transition-shadow cursor-pointer">
+                      <CardContent className="p-6">
+                        <div className="flex items-start justify-between mb-3">
+                          <h3 className="text-lg font-semibold text-[#2D3436] dark:text-white line-clamp-1">
+                            {venue.name}
+                          </h3>
+                          {venue.rating && (
+                            <div className="flex items-center gap-1">
+                              <Star className="h-4 w-4 text-yellow-500 fill-current" />
+                              <span className="text-sm text-[#636E72]">{venue.rating}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <p className="text-[#636E72] text-sm mb-4 line-clamp-2">
+                          {venue.description}
+                        </p>
+
+                        <div className="space-y-2 mb-4">
+                          <div className="flex items-center gap-2 text-sm text-[#636E72]">
+                            <MapPin className="h-4 w-4" />
+                            <span className="line-clamp-1">
+                              {venue.city}{venue.locality && `, ${venue.locality}`}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-[#636E72]">
+                            <DollarSign className="h-4 w-4" />
+                            <span>₹{venue.starting_price_per_hour}/hour</span>
+                          </div>
+                        </div>
+
+                        {/* Sports */}
+                        {venue.sports.length > 0 && (
+                          <div className="mb-4">
+                            <div className="flex flex-wrap gap-1">
+                              {venue.sports.slice(0, 3).map((sport) => (
+                                <Badge
+                                  key={sport.id}
+                                  variant="outline"
+                                  className="text-xs bg-blue-50 text-blue-700"
+                                >
+                                  {sport.name}
+                                </Badge>
+                              ))}
+                              {venue.sports.length > 3 && (
+                                <Badge variant="outline" className="text-xs">
+                                  +{venue.sports.length - 3} more
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Amenities */}
+                        {venue.amenities.length > 0 && (
+                          <div className="mb-4">
+                            <div className="flex flex-wrap gap-1">
+                              {venue.amenities.slice(0, 3).map((amenity) => (
+                                <Badge
+                                  key={amenity}
+                                  variant="outline"
+                                  className="text-xs"
+                                >
+                                  {amenity}
+                                </Badge>
+                              ))}
+                              {venue.amenities.length > 3 && (
+                                <Badge variant="outline" className="text-xs">
+                                  +{venue.amenities.length - 3} more
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        <Button className="w-full bg-[#2ECC71] hover:bg-[#27AE60]">
+                          View Details
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                {/* Pagination */}
+                {(pagination.hasNext || pagination.hasPrevious) && (
+                  <div className="flex justify-center items-center gap-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => handlePageChange(pagination.page - 1)}
+                      disabled={!pagination.hasPrevious || isSearching}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm text-[#636E72]">
+                      Page {pagination.page}
+                    </span>
+                    <Button
+                      variant="outline"
+                      onClick={() => handlePageChange(pagination.page + 1)}
+                      disabled={!pagination.hasNext || isSearching}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
